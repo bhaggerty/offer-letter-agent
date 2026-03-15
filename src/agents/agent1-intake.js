@@ -53,6 +53,12 @@ async function processFromAshby({ offerData, slack }) {
       { type: 'divider' },
       {
         type: 'input',
+        block_id: 'role',
+        label: { type: 'plain_text', text: 'Job Title' },
+        element: { type: 'plain_text_input', action_id: 'input', initial_value: offerData.role || '', placeholder: { type: 'plain_text', text: 'e.g. Senior Software Engineer' } },
+      },
+      {
+        type: 'input',
         block_id: 'start_date',
         label: { type: 'plain_text', text: 'Start Date' },
         element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. June 1, 2025' } },

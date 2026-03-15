@@ -26,6 +26,7 @@ function registerSlackHandlers(app) {
 
     const offerData = {
       ...baseData,
+      role:            values.role?.input?.value || baseData.role,
       startDate:       values.start_date?.input?.value,
       salary:          values.salary?.input?.value,
       signingBonus:    values.signing_bonus?.input?.value || 'N/A',
