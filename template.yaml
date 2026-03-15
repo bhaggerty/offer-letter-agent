@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Offer Letter Agent — Slack / Google Drive / DocuSign pipeline
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 512
+    Timeout: 60
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: !Ref EnvelopeTable
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+
+Parameters:
+  SlackBotToken:
+    Type: String
+    NoEcho: true
+  SlackSigningSecret:
+    Type: String
+    NoEcho: true
+  SlackApprovalChannel:
+    Type: String
+  SlackRecruiterNotifyChannel:
+    Type: String
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+  GoogleServiceAccountJson:
+    Type: String
+    NoEcho: true
+  GoogleOfferTemplateId:
+    Type: String
+  GoogleOffersFolderId:
+    Type: String
+  GoogleTrackingSheetId:
+    Type: String
+    Default: ''
+  DocusignIntegrationKey:
+    Type: String
+    NoEcho: true
+  DocusignSecretKey:
+    Type: String
+    NoEcho: true
+  DocusignAccountId:
+    Type: String
+  DocusignBasePath:
+    Type: String
+    Default: 'https://na4.docusign.net/restapi'
+  DocusignImpersonatedUserId:
+    Type: String
+  DocusignPrivateKey:
+    Type: String
+    NoEcho: true
+  AshbyWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SlackBlakeUserId:
+    Type: String
+  DocusignAlexName:
+    Type: String
+    Default: 'Alex Bovee'
+  DocusignAlexEmail:
+    Type: String
+  DocusignBlakeName:
+    Type: String
+    Default: 'Blake Haggerty'
+  DocusignBlakeEmail:
+    Type: String
+  OfferReminderDays:
+    Type: String
+    Default: '3'
+
+Resources:
+  # ── DynamoDB table for envelope state ─────────────────────────────────
+  EnvelopeTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: offer-letter-envelopes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: envelopeId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: envelopeId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ── Main Lambda (Slack events + DocuSign webhook) ──────────────────────
+  OfferLetterAgent:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: offer-letter-agent
+      Handler: src/handlers/lambda.handler
+      Description: Processes offer letter workflow from Slack to DocuSign
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EnvelopeTable
+      Environment:
+        Variables:
+          SLACK_BOT_TOKEN:                !Ref SlackBotToken
+          SLACK_SIGNING_SECRET:           !Ref SlackSigningSecret
+          SLACK_BLAKE_USER_ID:            !Ref SlackBlakeUserId
+          SLACK_RECRUITER_NOTIFY_CHANNEL: !Ref SlackRecruiterNotifyChannel
+          ASHBY_WEBHOOK_SECRET:           !Ref AshbyWebhookSecret
+          ANTHROPIC_API_KEY:              !Ref AnthropicApiKey
+          GOOGLE_SERVICE_ACCOUNT_JSON:    !Ref GoogleServiceAccountJson
+          GOOGLE_OFFER_TEMPLATE_ID:       !Ref GoogleOfferTemplateId
+          GOOGLE_OFFERS_FOLDER_ID:        !Ref GoogleOffersFolderId
+          GOOGLE_TRACKING_SHEET_ID:       !Ref GoogleTrackingSheetId
+          DOCUSIGN_INTEGRATION_KEY:       !Ref DocusignIntegrationKey
+          DOCUSIGN_SECRET_KEY:            !Ref DocusignSecretKey
+          DOCUSIGN_ACCOUNT_ID:            !Ref DocusignAccountId
+          DOCUSIGN_BASE_PATH:             !Ref DocusignBasePath
+          DOCUSIGN_IMPERSONATED_USER_ID:  !Ref DocusignImpersonatedUserId
+          DOCUSIGN_PRIVATE_KEY:           !Ref DocusignPrivateKey
+          DOCUSIGN_ALEX_NAME:             !Ref DocusignAlexName
+          DOCUSIGN_ALEX_EMAIL:            !Ref DocusignAlexEmail
+          DOCUSIGN_BLAKE_NAME:            !Ref DocusignBlakeName
+          DOCUSIGN_BLAKE_EMAIL:           !Ref DocusignBlakeEmail
+          DOCUSIGN_WEBHOOK_URL:           !Sub 'https://${OfferLetterApi}.execute-api.${AWS::Region}.amazonaws.com/prod/docusign-webhook'
+          OFFER_REMINDER_DAYS:            !Ref OfferReminderDays
+      Events:
+        SlackEvents:
+          Type: Api
+          Properties:
+            RestApiId: !Ref OfferLetterApi
+            Path: /slack/events
+            Method: post
+        AshbyWebhook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref OfferLetterApi
+            Path: /ashby-webhook
+            Method: post
+        DocuSignWebhook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref OfferLetterApi
+            Path: /docusign-webhook
+            Method: post
+
+  # ── Reminder Lambda — runs on EventBridge cron daily at 9am UTC ───────
+  ReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: offer-letter-reminder
+      Handler: src/handlers/reminder.handler
+      Description: Sends DocuSign reminders for pending envelopes
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EnvelopeTable
+      Environment:
+        Variables:
+          DOCUSIGN_INTEGRATION_KEY:      !Ref DocusignIntegrationKey
+          DOCUSIGN_ACCOUNT_ID:           !Ref DocusignAccountId
+          DOCUSIGN_BASE_PATH:            !Ref DocusignBasePath
+          DOCUSIGN_IMPERSONATED_USER_ID: !Ref DocusignImpersonatedUserId
+          DOCUSIGN_PRIVATE_KEY:          !Ref DocusignPrivateKey
+          OFFER_REMINDER_DAYS:           !Ref OfferReminderDays
+      Events:
+        DailyReminder:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 9 * * ? *)
+            Description: Daily reminder check for pending offer signatures
+
+  # ── API Gateway ────────────────────────────────────────────────────────
+  OfferLetterApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: offer-letter-api
+      StageName: prod
+      Description: API Gateway for Slack events and DocuSign webhook
+
+Outputs:
+  AshbyWebhookUrl:
+    Description: "Paste this into Ashby → Settings → Integrations → Webhooks"
+    Value: !Sub 'https://${OfferLetterApi}.execute-api.${AWS::Region}.amazonaws.com/prod/ashby-webhook'
+  SlackEventsUrl:
+    Description: "Paste this into your Slack App's Interactivity Request URL"
+    Value: !Sub 'https://${OfferLetterApi}.execute-api.${AWS::Region}.amazonaws.com/prod/slack/events'
+  DocuSignWebhookUrl:
+    Description: "Paste this into DocuSign Connect as the webhook URL"
+    Value: !Sub 'https://${OfferLetterApi}.execute-api.${AWS::Region}.amazonaws.com/prod/docusign-webhook'

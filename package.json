@@ -1,0 +1,24 @@
+{
+  "name": "offer-letter-agent",
+  "version": "1.0.0",
+  "description": "Automated offer letter pipeline: Slack → Approval → Google Drive → DocuSign → Slack",
+  "main": "src/handlers/lambda.js",
+  "scripts": {
+    "start": "node src/handlers/local.js",
+    "deploy": "zip -r function.zip . -x '*.git*' && aws lambda update-function-code --function-name offer-letter-agent --zip-file fileb://function.zip",
+    "test:slack": "node scripts/test-slack-payload.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@slack/bolt": "^3.19.0",
+    "@slack/web-api": "^7.3.0",
+    "docusign-esign": "^6.4.0",
+    "googleapis": "^140.0.0",
+    "axios": "^1.7.2",
+    "node-fetch": "^3.3.2",
+    "uuid": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20.x"
+  }
+}
