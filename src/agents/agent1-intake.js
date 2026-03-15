@@ -1,21 +1,20 @@
 'use strict';
 
 /**
- * AGENT 1 — Intake & Approval
- *
- * Trigger: Ashby "candidateHire" webhook.
+ * AGENT 1 — Intake & Two-Step Approval
  *
  * Flow:
- *  1. Ashby fires hire event with basic candidate info
- *  2. DM the recruiter a Slack modal to fill in missing offer details
- *  3. Recruiter submits the form
- *  4. DM Blake with full offer details + Approve/Reject buttons
- *  5. Blake approves → fire Agent 2 (doc generation pipeline)
- *  6. Blake rejects → notify recruiter
+ *  1. Ashby fires hire event
+ *  2. Recruiter gets Slack form to fill in offer details
+ *  3. Recruiter submits → Blake gets approval DM with option to add notes
+ *  4. Blake approves (with optional notes) → private channel where Paul/Alex approve
+ *  5. Paul or Alex approves → pipeline fires
+ *  6. Any rejection → notify appropriate party
  */
 
-const BLAKE_SLACK_USER_ID      = process.env.SLACK_BLAKE_USER_ID;
-const RECRUITER_NOTIFY_CHANNEL = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL;
+const BLAKE_SLACK_USER_ID        = process.env.SLACK_BLAKE_USER_ID;
+const RECRUITER_NOTIFY_CHANNEL   = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL;
+const EXEC_APPROVAL_CHANNEL      = process.env.SLACK_EXEC_APPROVAL_CHANNEL; // C0AM3NZDA81
 
 /**
  * Entry point called by the Ashby webhook handler.
@@ -24,10 +23,8 @@ const RECRUITER_NOTIFY_CHANNEL = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL;
 async function processFromAshby({ offerData, slack }) {
   console.log('[AGENT1] Processing Ashby hired event for', offerData.candidateName);
 
-  // Find the recruiter to DM — fall back to notify channel if no recruiter ID
   const recruiterId = offerData.recruiterId || RECRUITER_NOTIFY_CHANNEL;
 
-  // Open a Slack modal / DM form for the recruiter to fill in offer details
   await slack.chat.postMessage({
     channel: recruiterId,
     text: `New hire detected — please fill in offer details for ${offerData.candidateName}`,
@@ -40,11 +37,10 @@ async function processFromAshby({ offerData, slack }) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*${offerData.candidateName}* was just marked as Hired in Ashby for the *${offerData.role || 'Unknown Role'}* position.\n\nPlease fill in the offer details below and submit for Blake's approval.`,
+          text: `*${offerData.candidateName}* was just marked as Hired in Ashby for the *${offerData.role || 'Unknown Role'}* position.\n\nPlease fill in the offer details below and submit for approval.`,
         },
       },
       { type: 'divider' },
-      // Pre-filled read-only info
       {
         type: 'section',
         fields: [
@@ -59,63 +55,39 @@ async function processFromAshby({ offerData, slack }) {
         type: 'input',
         block_id: 'start_date',
         label: { type: 'plain_text', text: 'Start Date' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          placeholder: { type: 'plain_text', text: 'e.g. June 1, 2025' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. June 1, 2025' } },
       },
       {
         type: 'input',
         block_id: 'salary',
         label: { type: 'plain_text', text: 'Base Salary' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          placeholder: { type: 'plain_text', text: 'e.g. $120,000/year' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. $120,000/year' } },
       },
       {
         type: 'input',
         block_id: 'signing_bonus',
         label: { type: 'plain_text', text: 'Signing Bonus' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          placeholder: { type: 'plain_text', text: 'e.g. $10,000 or N/A' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. $10,000 or N/A' } },
         optional: true,
       },
       {
         type: 'input',
         block_id: 'equity',
         label: { type: 'plain_text', text: 'Equity / Shares' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          placeholder: { type: 'plain_text', text: 'e.g. 10,000 options or N/A' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. 10,000 options or N/A' } },
         optional: true,
       },
       {
         type: 'input',
         block_id: 'reports_to',
         label: { type: 'plain_text', text: 'Reports To (Manager Name)' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          placeholder: { type: 'plain_text', text: 'e.g. Jane Smith' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. Jane Smith' } },
       },
       {
         type: 'input',
         block_id: 'work_location',
         label: { type: 'plain_text', text: 'Work Location' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          placeholder: { type: 'plain_text', text: 'e.g. Remote, New York, NY' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. Remote, New York, NY' } },
       },
       {
         type: 'input',
@@ -136,12 +108,7 @@ async function processFromAshby({ offerData, slack }) {
         type: 'input',
         block_id: 'additional_notes',
         label: { type: 'plain_text', text: 'Additional Notes' },
-        element: {
-          type: 'plain_text_input',
-          action_id: 'input',
-          multiline: true,
-          placeholder: { type: 'plain_text', text: 'Any additional notes for the offer letter...' },
-        },
+        element: { type: 'plain_text_input', action_id: 'input', multiline: true, placeholder: { type: 'plain_text', text: 'Any additional notes...' } },
         optional: true,
       },
       { type: 'divider' },
@@ -171,8 +138,7 @@ async function processFromAshby({ offerData, slack }) {
 }
 
 /**
- * Called when recruiter submits the offer details form.
- * Sends Blake the full offer for approval.
+ * Step 2: Send to Blake for first approval with notes option.
  */
 async function routeToBlakeForApproval({ offerData, client }) {
   const offerValueJson  = JSON.stringify(offerData);
@@ -184,7 +150,7 @@ async function routeToBlakeForApproval({ offerData, client }) {
     blocks: [
       {
         type: 'header',
-        text: { type: 'plain_text', text: '📋 Offer Letter Approval Required' },
+        text: { type: 'plain_text', text: '📋 Offer Letter — Your Approval Required' },
       },
       {
         type: 'section',
@@ -209,24 +175,32 @@ async function routeToBlakeForApproval({ offerData, client }) {
       },
       ...(offerData.additionalNotes ? [{
         type: 'section',
-        text: { type: 'mrkdwn', text: `*Notes*\n${offerData.additionalNotes}` },
+        text: { type: 'mrkdwn', text: `*Recruiter Notes*\n${offerData.additionalNotes}` },
       }] : []),
+      {
+        type: 'input',
+        block_id: 'blake_notes',
+        label: { type: 'plain_text', text: 'Your Notes (optional)' },
+        element: { type: 'plain_text_input', action_id: 'input', multiline: true, placeholder: { type: 'plain_text', text: 'Add any notes for Paul/Alex...' } },
+        optional: true,
+      },
       {
         type: 'context',
         elements: [{ type: 'mrkdwn', text: `_Submitted by <@${offerData.recruiterId}> · ${new Date().toLocaleString()}_` }],
       },
       {
         type: 'actions',
+        block_id: 'blake_approval_actions',
         elements: [
           {
             type: 'button',
-            text: { type: 'plain_text', text: '✅ Approve & Send' },
+            text: { type: 'plain_text', text: '✅ Approve & Send to Exec' },
             style: 'primary',
-            action_id: 'approve_offer',
+            action_id: 'blake_approve_offer',
             value: offerValueJson,
             confirm: {
               title: { type: 'plain_text', text: 'Approve this offer?' },
-              text: { type: 'mrkdwn', text: `This will generate the offer letter and send it to *${offerData.candidateName}* via DocuSign.` },
+              text: { type: 'mrkdwn', text: `This will send the offer to the exec approval channel for final sign-off.` },
               confirm: { type: 'plain_text', text: 'Yes, approve' },
               deny: { type: 'plain_text', text: 'Cancel' },
             },
@@ -235,7 +209,7 @@ async function routeToBlakeForApproval({ offerData, client }) {
             type: 'button',
             text: { type: 'plain_text', text: '❌ Reject' },
             style: 'danger',
-            action_id: 'reject_offer',
+            action_id: 'blake_reject_offer',
             value: rejectValueJson,
           },
         ],
@@ -243,11 +217,84 @@ async function routeToBlakeForApproval({ offerData, client }) {
     ],
   });
 
-  // Confirm to recruiter
   await client.chat.postMessage({
     channel: offerData.recruiterId,
-    text: `👍 Offer details for *${offerData.candidateName}* have been sent to Blake for approval. You'll be notified once it's processed.`,
+    text: `👍 Offer details for *${offerData.candidateName}* have been sent to Blake for review. You'll be notified once it's fully approved.`,
   });
 }
 
-module.exports = { processFromAshby, routeToBlakeForApproval };
+/**
+ * Step 3: Send to exec channel (Paul/Alex) for final approval.
+ */
+async function routeToExecChannel({ offerData, blakeNotes, client }) {
+  const offerWithNotes = { ...offerData, blakeNotes };
+  const offerValueJson  = JSON.stringify(offerWithNotes);
+  const rejectValueJson = JSON.stringify({ offerData: offerWithNotes });
+
+  await client.chat.postMessage({
+    channel: EXEC_APPROVAL_CHANNEL,
+    text: `Exec approval required for offer — ${offerData.candidateName}`,
+    blocks: [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: '📋 Offer Letter — Exec Approval Required' },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Candidate*\n${offerData.candidateName || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Email*\n${offerData.candidateEmail || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Role*\n${offerData.role || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Department*\n${offerData.department || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Start Date*\n${offerData.startDate || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Reports To*\n${offerData.reportsTo || 'N/A'}` },
+        ],
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Base Salary*\n${offerData.salary || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Signing Bonus*\n${offerData.signingBonus || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Equity*\n${offerData.equity || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Location*\n${offerData.workLocation || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType || 'Full-time'}` },
+        ],
+      },
+      ...(blakeNotes ? [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Notes from Blake*\n${blakeNotes}` },
+      }] : []),
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: `_Approved by <@${BLAKE_SLACK_USER_ID}> · ${new Date().toLocaleString()}_` }],
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '✅ Approve & Send Offer' },
+            style: 'primary',
+            action_id: 'exec_approve_offer',
+            value: offerValueJson,
+            confirm: {
+              title: { type: 'plain_text', text: 'Approve this offer?' },
+              text: { type: 'mrkdwn', text: `This will generate and send the offer letter to *${offerData.candidateName}* via DocuSign.` },
+              confirm: { type: 'plain_text', text: 'Yes, approve' },
+              deny: { type: 'plain_text', text: 'Cancel' },
+            },
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '❌ Reject' },
+            style: 'danger',
+            action_id: 'exec_reject_offer',
+            value: rejectValueJson,
+          },
+        ],
+      },
+    ],
+  });
+}
+
+module.exports = { processFromAshby, routeToBlakeForApproval, routeToExecChannel };
