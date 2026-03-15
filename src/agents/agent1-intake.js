@@ -189,17 +189,22 @@ async function routeToBlakeForApproval({ offerData, client }) {
       {
         type: 'section',
         fields: [
-          { type: 'mrkdwn', text: `*Candidate*\n${offerData.candidateName}` },
-          { type: 'mrkdwn', text: `*Email*\n${offerData.candidateEmail}` },
-          { type: 'mrkdwn', text: `*Role*\n${offerData.role}` },
-          { type: 'mrkdwn', text: `*Department*\n${offerData.department}` },
-          { type: 'mrkdwn', text: `*Start Date*\n${offerData.startDate}` },
-          { type: 'mrkdwn', text: `*Reports To*\n${offerData.reportsTo}` },
-          { type: 'mrkdwn', text: `*Base Salary*\n${offerData.salary}` },
+          { type: 'mrkdwn', text: `*Candidate*\n${offerData.candidateName || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Email*\n${offerData.candidateEmail || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Role*\n${offerData.role || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Department*\n${offerData.department || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Start Date*\n${offerData.startDate || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Reports To*\n${offerData.reportsTo || 'N/A'}` },
+        ],
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Base Salary*\n${offerData.salary || 'N/A'}` },
           { type: 'mrkdwn', text: `*Signing Bonus*\n${offerData.signingBonus || 'N/A'}` },
           { type: 'mrkdwn', text: `*Equity*\n${offerData.equity || 'N/A'}` },
-          { type: 'mrkdwn', text: `*Location*\n${offerData.workLocation}` },
-          { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType}` },
+          { type: 'mrkdwn', text: `*Location*\n${offerData.workLocation || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType || 'Full-time'}` },
         ],
       },
       ...(offerData.additionalNotes ? [{
