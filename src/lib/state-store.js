@@ -26,7 +26,7 @@ const {
   ScanCommand,
 } = require('@aws-sdk/lib-dynamodb');
 
-const TABLE_NAME = process.env.DYNAMODB_TABLE || 'offer-letter-envelopes';
+const TABLE_NAME = process.env.APP_DYNAMODB_TABLE_NAME || process.env.DYNAMODB_TABLE || 'offer-letter-envelopes';
 
 let _client;
 function getClient() {

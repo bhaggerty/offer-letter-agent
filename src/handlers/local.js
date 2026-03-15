@@ -32,9 +32,9 @@ receiver.router.post('/docusign-webhook', express.json(), async (req, res) => {
 });
 
 (async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log('⚡ Offer letter agent running on port', process.env.PORT || 3000);
-  console.log('   Slack events:       http://localhost:3000/slack/events');
-  console.log('   DocuSign webhook:   http://localhost:3000/docusign-webhook');
+  await app.start(process.env.PORT || 8080);
+  console.log('⚡ Offer letter agent running on port', process.env.PORT || 8080);
+  console.log('   Slack events:       http://localhost:8080/slack/events');
+  console.log('   DocuSign webhook:   http://localhost:8080/docusign-webhook');
   console.log('   Use ngrok to expose for Slack + DocuSign Connect configuration');
 })();
