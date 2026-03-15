@@ -1,48 +1,65 @@
 'use strict';
 
 /**
- * Registers all Slack Bolt listeners:
- *  - view submission  → offer_intake_modal  → Agent 1 (parse + route to Blake)
- *  - block_action     → approve_offer       → Agent 2 onwards
- *  - block_action     → reject_offer        → notify recruiter
+ * Slack Bolt listeners.
+ *
+ *  - block_action → submit_offer_form  → recruiter submitted offer details → route to Blake
+ *  - block_action → approve_offer      → Blake approved → fire Agent 2
+ *  - block_action → reject_offer       → Blake rejected → notify recruiter
+ *  - block_action → view_signed_offer  → no-op (link opens client-side)
  */
 
-const agent1 = require('../agents/agent1-intake');
+const { routeToBlakeForApproval } = require('../agents/agent1-intake');
 
 function registerSlackHandlers(app) {
-  // ── Recruiter submits the intake modal ──────────────────────────────────
-  app.view('offer_intake_modal', async ({ ack, view, body, client }) => {
+
+  // ── Recruiter submits offer details form ──────────────────────────────
+  app.action('submit_offer_form', async ({ ack, body, action, client }) => {
     await ack();
 
-    const recruiterId = body.user.id;
-    const values = view.state.values;
+    const baseData   = JSON.parse(action.value);
+    const values     = body.state.values;
 
-    // Extract all fields from the modal blocks
+    // Merge base data from Ashby with recruiter-filled fields
     const offerData = {
-      candidateName:    values.candidate_name?.input?.value,
-      candidateEmail:   values.candidate_email?.input?.value,
-      role:             values.role?.input?.value,
-      department:       values.department?.input?.value,
-      startDate:        values.start_date?.input?.value,
-      salary:           values.salary?.input?.value,
-      signingBonus:     values.signing_bonus?.input?.value || '0',
-      equity:           values.equity?.input?.value || 'N/A',
-      reportsTo:        values.reports_to?.input?.value,
-      workLocation:     values.work_location?.input?.value,
-      additionalNotes:  values.additional_notes?.input?.value || '',
-      recruiterId,
-      submittedAt:      new Date().toISOString(),
+      ...baseData,
+      startDate:      values.start_date?.input?.value,
+      salary:         values.salary?.input?.value,
+      signingBonus:   values.signing_bonus?.input?.value || 'N/A',
+      equity:         values.equity?.input?.value || 'N/A',
+      reportsTo:      values.reports_to?.input?.value,
+      workLocation:   values.work_location?.input?.value,
+      employmentType: values.employment_type?.input?.selected_option?.value || 'Full-time',
+      additionalNotes: values.additional_notes?.input?.value || '',
+      submittedAt:    new Date().toISOString(),
     };
 
-    console.log('[AGENT1] Modal submitted by', recruiterId, offerData);
+    console.log('[AGENT1] Recruiter submitted offer form for', offerData.candidateName);
 
+    // Update the form message to show it's been submitted
+    await client.chat.update({
+      channel: body.channel.id,
+      ts: body.message.ts,
+      text: `✅ Offer details submitted for *${offerData.candidateName}* — sent to Blake for approval.`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `✅ Offer details submitted for *${offerData.candidateName}* (${offerData.role}). Sent to Blake for approval.`,
+          },
+        },
+      ],
+    });
+
+    // Route to Blake for approval
     try {
-      await agent1.processIntakeAndRoute({ offerData, client });
+      await routeToBlakeForApproval({ offerData, client });
     } catch (err) {
-      console.error('[AGENT1] Error processing intake:', err);
+      console.error('[AGENT1] Error routing to Blake:', err);
       await client.chat.postMessage({
-        channel: recruiterId,
-        text: `⚠️ Something went wrong processing your offer submission for *${offerData.candidateName}*. Please try again or contact the engineering team.`,
+        channel: offerData.recruiterId,
+        text: `⚠️ Something went wrong sending the offer to Blake. Error: ${err.message}`,
       });
     }
   });
@@ -51,36 +68,34 @@ function registerSlackHandlers(app) {
   app.action('approve_offer', async ({ ack, body, action, client }) => {
     await ack();
 
-    const offerData = JSON.parse(action.value);
+    const offerData  = JSON.parse(action.value);
     const approverId = body.user.id;
 
     console.log('[AGENT1] Offer approved by', approverId, 'for', offerData.candidateName);
 
-    // Update the approval message to show approved state
     await client.chat.update({
       channel: body.channel.id,
       ts: body.message.ts,
-      text: `✅ Offer for *${offerData.candidateName}* approved by <@${approverId}>. Processing now...`,
+      text: `✅ Offer for *${offerData.candidateName}* approved — generating offer letter...`,
       blocks: [
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `✅ *Offer Approved* by <@${approverId}>\n*Candidate:* ${offerData.candidateName}\n*Role:* ${offerData.role}\nGenerating offer letter and sending to DocuSign...`,
+            text: `✅ *Approved* by <@${approverId}>\n*Candidate:* ${offerData.candidateName}\n*Role:* ${offerData.role}\n\nGenerating offer letter and routing to DocuSign...`,
           },
         },
       ],
     });
 
-    // Kick off the doc generation pipeline (agents 2-5)
     try {
       const { runDocPipeline } = require('../agents/agent2-docgen');
-      await runDocPipeline({ offerData, approverId, client });
+      await runDocPipeline({ offerData, client });
     } catch (err) {
       console.error('[AGENT2+] Pipeline error:', err);
       await client.chat.postMessage({
         channel: offerData.recruiterId,
-        text: `⚠️ Approval succeeded but document generation failed for *${offerData.candidateName}*. Error: ${err.message}`,
+        text: `⚠️ Blake approved the offer for *${offerData.candidateName}* but document generation failed. Error: ${err.message}`,
       });
     }
   });
@@ -89,12 +104,11 @@ function registerSlackHandlers(app) {
   app.action('reject_offer', async ({ ack, body, action, client }) => {
     await ack();
 
-    const { offerData, reason } = JSON.parse(action.value);
-    const rejecterId = body.user.id;
+    const { offerData } = JSON.parse(action.value);
+    const rejecterId   = body.user.id;
 
     console.log('[AGENT1] Offer rejected by', rejecterId, 'for', offerData.candidateName);
 
-    // Update the approval message
     await client.chat.update({
       channel: body.channel.id,
       ts: body.message.ts,
@@ -104,17 +118,21 @@ function registerSlackHandlers(app) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `❌ *Offer Rejected* by <@${rejecterId}>\n*Candidate:* ${offerData.candidateName}\n*Role:* ${offerData.role}`,
+            text: `❌ *Rejected* by <@${rejecterId}>\n*Candidate:* ${offerData.candidateName}\n*Role:* ${offerData.role}`,
           },
         },
       ],
     });
 
-    // Notify recruiter
     await client.chat.postMessage({
       channel: offerData.recruiterId,
-      text: `❌ The offer for *${offerData.candidateName}* (${offerData.role}) was *not approved* by <@${rejecterId}>. Please follow up for more details.`,
+      text: `❌ The offer for *${offerData.candidateName}* (${offerData.role}) was not approved by <@${rejecterId}>. Please follow up directly for more details.`,
     });
+  });
+
+  // ── View Signed Offer button — link opens client-side ─────────────────
+  app.action('view_signed_offer', async ({ ack }) => {
+    await ack();
   });
 }
 
