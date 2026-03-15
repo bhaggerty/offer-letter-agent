@@ -46,6 +46,8 @@ async function runDocPipeline({ offerData, client }) {
       equity:         offerData.equity,
       employmentType: offerData.employmentType || 'Full-time',
       workLocation:   offerData.workLocation,
+      variableComp:   offerData.variableComp || '',
+      rampPeriod:     offerData.rampPeriod || '',
     }, {
       headers: { 'Content-Type': 'application/json' },
       maxRedirects: 5, // Apps Script web apps redirect once

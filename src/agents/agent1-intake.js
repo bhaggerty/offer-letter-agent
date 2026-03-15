@@ -112,6 +112,20 @@ async function processFromAshby({ offerData, slack }) {
       },
       {
         type: 'input',
+        block_id: 'variable_comp',
+        label: { type: 'plain_text', text: 'Variable Comp (Sales only)' },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. $40,000/year — leave blank for standard offer' } },
+        optional: true,
+      },
+      {
+        type: 'input',
+        block_id: 'ramp_period',
+        label: { type: 'plain_text', text: 'Ramp Period (Sales only)' },
+        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. 3 months — leave blank for standard offer' } },
+        optional: true,
+      },
+      {
+        type: 'input',
         block_id: 'additional_notes',
         label: { type: 'plain_text', text: 'Additional Notes' },
         element: { type: 'plain_text_input', action_id: 'input', multiline: true, placeholder: { type: 'plain_text', text: 'Any additional notes...' } },
