@@ -28,7 +28,8 @@ async function handleAshbyWebhook(event) {
   // ── 1. Verify Ashby webhook signature ────────────────────────────────
   const rawBody = typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
 
-  if (process.env.ASHBY_WEBHOOK_SECRET) {
+  // Skip signature check if no body (ping request)
+  if (process.env.ASHBY_WEBHOOK_SECRET && rawBody && rawBody !== "{}") {
     const signature = (event.headers || {})['x-ashby-signature'] ||
                       (event.headers || {})['X-Ashby-Signature'];
     if (!verifySignature(rawBody, signature)) {
