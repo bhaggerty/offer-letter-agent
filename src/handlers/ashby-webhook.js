@@ -10,7 +10,6 @@ async function handleAshbyWebhook(event) {
 
   const rawBody = typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
 
-  // Handle empty body ping requests
   if (!rawBody || rawBody === '{}' || rawBody === '') {
     console.log('[ASHBY] Ping received, responding OK');
     return { statusCode: 200, body: 'OK' };
@@ -23,54 +22,24 @@ async function handleAshbyWebhook(event) {
     return { statusCode: 200, body: 'OK' };
   }
 
-  // Log full payload so we can see exact shape in logs
   const eventType = payload?.action || payload?.event || payload?.type;
   console.log('[ASHBY] Event received:', eventType);
   console.log('[ASHBY] Full payload:', JSON.stringify(payload, null, 2));
 
-  // Respond OK to ping/test events
   if (eventType === 'ping' || eventType === 'test') {
     return { statusCode: 200, body: 'OK' };
   }
 
-  // Accept all hire-related event types from Ashby
-  const isHireEvent = [
-    'candidateHire',
-    'candidateHired',
-    'applicationStageChange',
-  ].includes(eventType);
-
+  const isHireEvent = ['candidateHire', 'candidateHired', 'applicationStageChange'].includes(eventType);
   if (!isHireEvent) {
     console.log('[ASHBY] Ignoring event type:', eventType);
     return { statusCode: 200, body: 'OK' };
   }
 
-  // For applicationStageChange, check it's actually the Hired stage
-  if (eventType === 'applicationStageChange') {
-    const application = payload?.data?.application || payload?.application;
-    const newStage    = payload?.data?.applicationStage || application?.currentInterviewStage;
-    const isHired =
-      newStage?.type === 'Hired' ||
-      newStage?.name?.toLowerCase() === 'hired' ||
-      application?.status === 'Hired';
-
-    if (!isHired) {
-      console.log('[ASHBY] Stage is not Hired, ignoring:', newStage?.name);
-      return { statusCode: 200, body: 'OK' };
-    }
-  }
-
-  // Extract offer data from payload
-  const application = payload?.data?.application || payload?.application || payload?.data || {};
+  const application = payload?.data?.application || {};
   console.log('[ASHBY] Candidate hired, processing offer:', application?.candidate?.name);
 
-  const offerData = extractOfferData(application, payload);
-
-  if (!offerData.candidateEmail) {
-    console.error('[ASHBY] No candidate email found');
-    await alertRecruitingChannel(`⚠️ A candidate was moved to Hired in Ashby but has no email on file. Please check the application for *${offerData.candidateName}*.`);
-    return { statusCode: 200, body: 'OK' };
-  }
+  const offerData = extractOfferData(application);
 
   try {
     await agent1.processFromAshby({ offerData, slack });
@@ -82,36 +51,39 @@ async function handleAshbyWebhook(event) {
   return { statusCode: 200, body: 'OK' };
 }
 
-function extractOfferData(application, payload) {
-  const candidate  = application?.candidate   || {};
-  const job        = application?.job         || {};
-  const offer      = application?.offer       || {};
-  const hiringTeam = application?.hiringTeamMemberships || [];
+function extractOfferData(application) {
+  const candidate      = application?.candidate || {};
+  const job            = application?.job || {};
+  const creditedToUser = application?.creditedToUser || {};
 
-  const recruiterEntry = hiringTeam.find(m =>
-    m?.role?.toLowerCase() === 'recruiter' || m?.title?.toLowerCase() === 'recruiter'
-  );
+  // Email is nested under primaryEmailAddress.value
+  const candidateEmail = candidate?.primaryEmailAddress?.value || 
+                         candidate?.email || 
+                         candidate?.primaryEmail || '';
 
-  const compensation = offer?.compensation || offer?.salaryRange || {};
-  const salaryValue  = compensation?.value || compensation?.min || offer?.salary || '';
-  const currency     = compensation?.currency || 'USD';
-  const salaryStr    = salaryValue ? `${currency} ${Number(salaryValue).toLocaleString()}/year` : '';
+  // Recruiter is the creditedToUser — map their email to a Slack user
+  // We store their Ashby user ID for now; the recruiter DM will go to SLACK_RECRUITER_NOTIFY_CHANNEL
+  // as a fallback since we don't have a direct Ashby→Slack user ID mapping
+  const recruiterId = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL;
 
   return {
-    candidateName:      [candidate.firstName, candidate.lastName].filter(Boolean).join(' ') || candidate.name || 'Unknown',
-    candidateEmail:     candidate.email || candidate.primaryEmail || '',
-    role:               job.title || offer?.jobTitle || '',
-    department:         job.departmentName || job.department?.name || '',
-    reportsTo:          offer?.hiringManagerName || '',
-    workLocation:       job.locationName || job.location?.name || offer?.workLocation || '',
-    salary:             salaryStr,
-    signingBonus:       offer?.signingBonus ? `${currency} ${Number(offer.signingBonus).toLocaleString()}` : '0',
-    equity:             offer?.equityValue || offer?.equity || 'N/A',
-    startDate:          offer?.startDate || '',
+    candidateName:      candidate?.name || 'Unknown',
+    candidateEmail,
+    role:               job?.title || '',
+    department:         job?.departmentId || '',
+    reportsTo:          '',
+    workLocation:       job?.locationId || '',
+    salary:             '',
+    signingBonus:       'N/A',
+    equity:             'N/A',
+    startDate:          '',
+    employmentType:     'Full-time',
     ashbyApplicationId: application?.id || '',
     ashbyJobId:         job?.id || '',
-    recruiterId:        recruiterEntry?.userId || process.env.SLACK_RECRUITER_NOTIFY_CHANNEL,
-    additionalNotes:    offer?.notes || '',
+    recruiterId,
+    creditedToUserEmail: creditedToUser?.email || '',
+    creditedToUserName:  `${creditedToUser?.firstName || ''} ${creditedToUser?.lastName || ''}`.trim(),
+    additionalNotes:    '',
     submittedAt:        new Date().toISOString(),
     source:             'ashby',
   };
