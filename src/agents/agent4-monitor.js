@@ -29,8 +29,23 @@ async function handleDocuSignWebhook(event) {
     return { statusCode: 400, body: 'Bad Request' };
   }
 
-  const envelopeId     = payload?.envelopeId || payload?.data?.envelopeId;
-  const envelopeStatus = payload?.status      || payload?.data?.envelopeSummary?.status;
+  // Log full payload so we can see exact shape
+  console.log('[AGENT4] Full payload:', JSON.stringify(payload, null, 2));
+
+  // DocuSign Connect JSON format
+  const envelopeId =
+    payload?.envelopeId ||
+    payload?.data?.envelopeId ||
+    payload?.data?.envelopeSummary?.envelopeId ||
+    payload?.EnvelopeStatus?.EnvelopeID ||
+    payload?.envelopeSummary?.envelopeId;
+
+  const envelopeStatus =
+    payload?.status ||
+    payload?.data?.envelopeSummary?.status ||
+    payload?.data?.status ||
+    payload?.EnvelopeStatus?.Status ||
+    payload?.envelopeSummary?.status;
 
   console.log('[AGENT4] Webhook received:', envelopeId, envelopeStatus);
 
