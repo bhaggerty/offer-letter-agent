@@ -3,18 +3,8 @@
 /**
  * State Store — DynamoDB
  *
- * Stores envelope → offer data mappings so Agent 4 and Agent 5
- * can look up context when DocuSign webhooks arrive.
- *
- * Table name: offer-letter-envelopes
- * Primary key: envelopeId (String)
- *
- * To create the table via CLI:
- *   aws dynamodb create-table \
- *     --table-name offer-letter-envelopes \
- *     --attribute-definitions AttributeName=envelopeId,AttributeType=S \
- *     --key-schema AttributeName=envelopeId,KeyType=HASH \
- *     --billing-mode PAY_PER_REQUEST
+ * Auto-provisioned table uses PK/SK key structure.
+ * We use PK = "ENVELOPE" and SK = envelopeId
  */
 
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
@@ -37,13 +27,12 @@ function getClient() {
   return _client;
 }
 
-/**
- * Save a new envelope record.
- */
 async function storeEnvelopeRecord(envelopeId, data) {
   await getClient().send(new PutCommand({
     TableName: TABLE_NAME,
     Item: {
+      PK: 'ENVELOPE',
+      SK: envelopeId,
       envelopeId,
       ...data,
       createdAt: new Date().toISOString(),
@@ -52,24 +41,18 @@ async function storeEnvelopeRecord(envelopeId, data) {
   }));
 }
 
-/**
- * Retrieve an envelope record by ID.
- */
 async function getEnvelopeRecord(envelopeId) {
   const res = await getClient().send(new GetCommand({
     TableName: TABLE_NAME,
-    Key: { envelopeId },
+    Key: { PK: 'ENVELOPE', SK: envelopeId },
   }));
   return res.Item || null;
 }
 
-/**
- * Update the status field of an existing record.
- */
 async function updateEnvelopeStatus(envelopeId, status) {
   await getClient().send(new UpdateCommand({
     TableName: TABLE_NAME,
-    Key: { envelopeId },
+    Key: { PK: 'ENVELOPE', SK: envelopeId },
     UpdateExpression: 'SET #s = :s, updatedAt = :u',
     ExpressionAttributeNames: { '#s': 'status' },
     ExpressionAttributeValues: {
@@ -79,15 +62,12 @@ async function updateEnvelopeStatus(envelopeId, status) {
   }));
 }
 
-/**
- * List all envelope records still in "sent" state (for reminder checks).
- */
 async function listPendingEnvelopes() {
   const res = await getClient().send(new ScanCommand({
     TableName: TABLE_NAME,
-    FilterExpression: '#s = :sent',
+    FilterExpression: '#s = :sent AND PK = :pk',
     ExpressionAttributeNames: { '#s': 'status' },
-    ExpressionAttributeValues: { ':sent': 'sent' },
+    ExpressionAttributeValues: { ':sent': 'sent', ':pk': 'ENVELOPE' },
   }));
   return res.Items || [];
 }
