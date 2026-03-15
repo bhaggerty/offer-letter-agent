@@ -42,13 +42,16 @@ async function downloadSignedPdf(envelopeId) {
   const apiClient = await getApiClient();
   const envelopesApi = new docusign.EnvelopesApi(apiClient);
 
+  // '1' downloads just the signed offer letter without the certificate of completion
   const pdfStream = await envelopesApi.getDocument(
     process.env.DOCUSIGN_ACCOUNT_ID,
     envelopeId,
-    'combined'
+    '1'
   );
 
+  // DocuSign returns a string of binary data — convert correctly
   if (Buffer.isBuffer(pdfStream)) return pdfStream;
+  if (typeof pdfStream === 'string') return Buffer.from(pdfStream, 'binary');
   return Buffer.from(pdfStream);
 }
 
