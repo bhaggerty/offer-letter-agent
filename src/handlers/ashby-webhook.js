@@ -8,8 +8,9 @@ const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 async function handleAshbyWebhook(event) {
   let payload;
 
-  // Handle empty or missing body (ping requests)
   const rawBody = typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
+
+  // Handle empty body ping requests
   if (!rawBody || rawBody === '{}' || rawBody === '') {
     console.log('[ASHBY] Ping received, responding OK');
     return { statusCode: 200, body: 'OK' };
@@ -22,33 +23,45 @@ async function handleAshbyWebhook(event) {
     return { statusCode: 200, body: 'OK' };
   }
 
-  // Respond OK to any ping/test events from Ashby
+  // Log full payload so we can see exact shape in logs
   const eventType = payload?.action || payload?.event || payload?.type;
   console.log('[ASHBY] Event received:', eventType);
+  console.log('[ASHBY] Full payload:', JSON.stringify(payload, null, 2));
 
+  // Respond OK to ping/test events
   if (eventType === 'ping' || eventType === 'test') {
     return { statusCode: 200, body: 'OK' };
   }
 
-  // Only process applicationStageChange → Hired
-  if (eventType !== 'applicationStageChange' && eventType !== 'candidateHired') {
+  // Accept all hire-related event types from Ashby
+  const isHireEvent = [
+    'candidateHire',
+    'candidateHired',
+    'applicationStageChange',
+  ].includes(eventType);
+
+  if (!isHireEvent) {
     console.log('[ASHBY] Ignoring event type:', eventType);
     return { statusCode: 200, body: 'OK' };
   }
 
-  const application = payload?.data?.application || payload?.application;
-  const newStage    = payload?.data?.applicationStage || application?.currentInterviewStage;
+  // For applicationStageChange, check it's actually the Hired stage
+  if (eventType === 'applicationStageChange') {
+    const application = payload?.data?.application || payload?.application;
+    const newStage    = payload?.data?.applicationStage || application?.currentInterviewStage;
+    const isHired =
+      newStage?.type === 'Hired' ||
+      newStage?.name?.toLowerCase() === 'hired' ||
+      application?.status === 'Hired';
 
-  const isHired =
-    newStage?.type === 'Hired' ||
-    newStage?.name?.toLowerCase() === 'hired' ||
-    application?.status === 'Hired';
-
-  if (!isHired) {
-    console.log('[ASHBY] Stage is not Hired, ignoring:', newStage?.name);
-    return { statusCode: 200, body: 'OK' };
+    if (!isHired) {
+      console.log('[ASHBY] Stage is not Hired, ignoring:', newStage?.name);
+      return { statusCode: 200, body: 'OK' };
+    }
   }
 
+  // Extract offer data from payload
+  const application = payload?.data?.application || payload?.application || payload?.data || {};
   console.log('[ASHBY] Candidate hired, processing offer:', application?.candidate?.name);
 
   const offerData = extractOfferData(application, payload);
