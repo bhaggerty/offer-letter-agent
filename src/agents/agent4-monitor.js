@@ -23,10 +23,32 @@ async function handleDocuSignWebhook(event) {
 
   try {
     const body = typeof event.body === 'string' ? event.body : JSON.stringify(event.body);
-    payload = JSON.parse(body);
+
+    // DocuSign sometimes sends XML even when JSON is configured
+    if (body.trim().startsWith('<')) {
+      console.log('[AGENT4] Received XML payload, parsing...');
+      // Extract envelope ID and status from XML using regex
+      const envelopeIdMatch = body.match(/<EnvelopeID>(.*?)<\/EnvelopeID>/i) ||
+                              body.match(/<envelopeId>(.*?)<\/envelopeId>/i);
+      const statusMatch     = body.match(/<Status>(.*?)<\/Status>/i) ||
+                              body.match(/<status>(.*?)<\/status>/i);
+
+      if (envelopeIdMatch && statusMatch) {
+        payload = {
+          envelopeId: envelopeIdMatch[1].trim(),
+          status:     statusMatch[1].trim(),
+        };
+        console.log('[AGENT4] Parsed XML — envelopeId:', payload.envelopeId, 'status:', payload.status);
+      } else {
+        console.warn('[AGENT4] Could not extract envelope ID/status from XML');
+        return { statusCode: 200, body: 'OK' };
+      }
+    } else {
+      payload = JSON.parse(body);
+    }
   } catch (err) {
     console.error('[AGENT4] Failed to parse webhook body:', err);
-    return { statusCode: 400, body: 'Bad Request' };
+    return { statusCode: 200, body: 'OK' };
   }
 
   // Log full payload so we can see exact shape
