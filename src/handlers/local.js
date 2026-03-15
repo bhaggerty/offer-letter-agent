@@ -1,14 +1,10 @@
 'use strict';
 
 /**
- * ECS/Local server — handles all incoming requests.
+ * ECS server — handles all incoming requests.
  * Run with: node src/handlers/local.js
+ * Secrets are injected as environment variables by ECS at runtime.
  */
-
-// Only load dotenv in local development — in ECS secrets are injected automatically
-if (process.env.NODE_ENV !== 'production') {
-  try { require('dotenv').config(); } catch (e) {}
-}
 
 const express = require('express');
 const { App, ExpressReceiver } = require('@slack/bolt');
