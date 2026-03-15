@@ -1,6 +1,13 @@
 const TEMPLATE_ID      = "1docqIMZDk7SkhCtCDZN46EU7NdYd2IGuq9vM4KjAMg4";
-const SECRET_KEY       = "REPLACE_WITH_YOUR_SECRET_KEY";
-const OFFERS_FOLDER_ID = "REPLACE_WITH_YOUR_OFFERS_FOLDER_ID";
+const SECRET_KEY       = "xK9mP2qL8nR4tY7w";
+const OFFERS_FOLDER_ID = "1XmUhromZyovH63FJU_DGKUVDmhp-22d9";
+
+function testDriveAccess() {
+  const folder = DriveApp.getFolderById(OFFERS_FOLDER_ID);
+  const template = DriveApp.getFileById(TEMPLATE_ID);
+  Logger.log("Folder: " + folder.getName());
+  Logger.log("Template: " + template.getName());
+}
 
 function doPost(e) {
   try {
@@ -10,12 +17,10 @@ function doPost(e) {
       return jsonResponse({ success: false, error: "Unauthorized" });
     }
 
-    // Route to correct action
     if (payload.action === 'uploadSignedPdf') {
       return jsonResponse(uploadSignedPdf(payload));
     }
 
-    // Default action — generate offer letter
     const result = generateOfferLetter(payload);
     return jsonResponse({ success: true, ...result });
 
@@ -31,46 +36,46 @@ function generateOfferLetter(data) {
     employmentType, workLocation,
   } = data;
 
-  // Create candidate folder
+  // Create candidate folder in private offers directory
   const offersFolder = DriveApp.getFolderById(OFFERS_FOLDER_ID);
-  const candidateFolder = offersFolder.createFolder(`${firstName} ${lastName}`);
+  const candidateFolder = offersFolder.createFolder(firstName + " " + lastName);
 
   // Copy template into candidate folder
   const templateFile = DriveApp.getFileById(TEMPLATE_ID);
-  const newFile = templateFile.makeCopy(`Offer Letter - ${firstName} ${lastName}`, candidateFolder);
+  const newFile = templateFile.makeCopy("Offer Letter - " + firstName + " " + lastName, candidateFolder);
   const doc = DocumentApp.openById(newFile.getId());
   const body = doc.getBody();
 
-  // Replace placeholders
+  // Replace all placeholders
   body.replaceText("{{DATE}}",          new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
-  body.replaceText("{{FirstName}}",      firstName      || "");
-  body.replaceText("{{LastName}}",       lastName       || "");
-  body.replaceText("{{JobTitle}}",       jobTitle       || "");
-  body.replaceText("{{Department}}",     department     || "");
-  body.replaceText("{{ManagerName}}",    managerName    || "");
-  body.replaceText("{{StartDate}}",      startDate      || "");
-  body.replaceText("{{BaseSalary}}",     baseSalary     || "");
-  body.replaceText("{{SigningBonus}}",   signingBonus   || "N/A");
-  body.replaceText("{{Shares}}",         equity         || "N/A");
-  body.replaceText("{{EmploymentType}}", employmentType || "");
-  body.replaceText("{{WorkLocation}}",   workLocation   || "");
+  body.replaceText("{{FirstName}}",     firstName      || "");
+  body.replaceText("{{LastName}}",      lastName       || "");
+  body.replaceText("{{JobTitle}}",      jobTitle       || "");
+  body.replaceText("{{Department}}",    department     || "");
+  body.replaceText("{{ManagerName}}",   managerName    || "");
+  body.replaceText("{{StartDate}}",     startDate      || "");
+  body.replaceText("{{BaseSalary}}",    baseSalary     || "");
+  body.replaceText("{{SigningBonus}}",  signingBonus   || "N/A");
+  body.replaceText("{{Shares}}",        equity         || "N/A");
+  body.replaceText("{{EmploymentType}}",employmentType || "");
+  body.replaceText("{{WorkLocation}}",  workLocation   || "");
 
   doc.saveAndClose();
 
-  // Export as PDF
+  // Export as PDF and save to candidate folder
   const docFile = DriveApp.getFileById(newFile.getId());
   const pdfBlob = docFile.getAs("application/pdf");
-  pdfBlob.setName(`Offer Letter - ${firstName} ${lastName}.pdf`);
+  pdfBlob.setName("Offer Letter - " + firstName + " " + lastName + ".pdf");
   const pdfFile = candidateFolder.createFile(pdfBlob);
 
   return {
-    docId:      newFile.getId(),
-    docUrl:     newFile.getUrl(),
-    pdfId:      pdfFile.getId(),
-    pdfUrl:     pdfFile.getUrl(),
-    folderId:   candidateFolder.getId(),
-    folderUrl:  candidateFolder.getUrl(),
-    pdfBase64:  Utilities.base64Encode(pdfBlob.getBytes()),
+    docId:     newFile.getId(),
+    docUrl:    newFile.getUrl(),
+    pdfId:     pdfFile.getId(),
+    pdfUrl:    pdfFile.getUrl(),
+    folderId:  candidateFolder.getId(),
+    folderUrl: candidateFolder.getUrl(),
+    pdfBase64: Utilities.base64Encode(pdfBlob.getBytes()),
   };
 }
 
@@ -83,9 +88,9 @@ function uploadSignedPdf(data) {
   const file = folder.createFile(blob);
 
   return {
-    success:  true,
-    fileId:   file.getId(),
-    fileUrl:  file.getUrl(),
+    success: true,
+    fileId:  file.getId(),
+    fileUrl: file.getUrl(),
   };
 }
 

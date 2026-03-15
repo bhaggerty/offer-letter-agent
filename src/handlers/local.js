@@ -24,7 +24,7 @@ const app = new App({
 
 registerSlackHandlers(app);
 
-// Ashby webhook — GET for ping verification, POST for events
+// Ashby webhook — GET for ping, POST for events
 receiver.router.get('/ashby-webhook', (req, res) => {
   res.status(200).send('OK');
 });
@@ -34,14 +34,21 @@ receiver.router.post('/ashby-webhook', express.json(), async (req, res) => {
   res.status(result.statusCode).send(result.body);
 });
 
-// DocuSign webhook — GET for ping verification, POST for events
+// DocuSign webhook — use raw body to preserve payload
 receiver.router.get('/docusign-webhook', (req, res) => {
   res.status(200).send('OK');
 });
-receiver.router.post('/docusign-webhook', express.json(), async (req, res) => {
-  const fakeEvent = { body: JSON.stringify(req.body), rawPath: '/docusign-webhook' };
-  const result = await handleDocuSignWebhook(fakeEvent);
-  res.status(result.statusCode).send(result.body);
+receiver.router.post('/docusign-webhook', express.raw({ type: '*/*', limit: '10mb' }), async (req, res) => {
+  try {
+    const rawBody = req.body instanceof Buffer ? req.body.toString('utf8') : JSON.stringify(req.body);
+    console.log('[DOCUSIGN] Raw body received, length:', rawBody.length);
+    const fakeEvent = { body: rawBody, rawPath: '/docusign-webhook' };
+    const result = await handleDocuSignWebhook(fakeEvent);
+    res.status(result.statusCode).send(result.body);
+  } catch (err) {
+    console.error('[DOCUSIGN] Handler error:', err);
+    res.status(200).send('OK');
+  }
 });
 
 (async () => {
