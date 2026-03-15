@@ -27,16 +27,29 @@ async function handleDocuSignWebhook(event) {
     // DocuSign sometimes sends XML even when JSON is configured
     if (body.trim().startsWith('<')) {
       console.log('[AGENT4] Received XML payload, parsing...');
-      // Extract envelope ID and status from XML using regex
+
       const envelopeIdMatch = body.match(/<EnvelopeID>(.*?)<\/EnvelopeID>/i) ||
                               body.match(/<envelopeId>(.*?)<\/envelopeId>/i);
       const statusMatch     = body.match(/<Status>(.*?)<\/Status>/i) ||
                               body.match(/<status>(.*?)<\/status>/i);
 
       if (envelopeIdMatch && statusMatch) {
+        const envelopeStatus = statusMatch[1].trim();
+
+        // Check if there are still pending signers — if so, skip this webhook
+        // DocuSign fires Completed per recipient; we only want the final envelope completion
+        const sentCount      = (body.match(/<Status>Sent<\/Status>/gi) || []).length;
+        const deliveredCount = (body.match(/<Status>Delivered<\/Status>/gi) || []).length;
+        const pendingSigners = sentCount + deliveredCount;
+
+        if (pendingSigners > 0) {
+          console.log('[AGENT4] Still ' + pendingSigners + ' pending signers, skipping intermediate completion');
+          return { statusCode: 200, body: 'OK' };
+        }
+
         payload = {
           envelopeId: envelopeIdMatch[1].trim(),
-          status:     statusMatch[1].trim(),
+          status:     envelopeStatus,
         };
         console.log('[AGENT4] Parsed XML — envelopeId:', payload.envelopeId, 'status:', payload.status);
       } else {
@@ -82,7 +95,13 @@ async function handleDocuSignWebhook(event) {
     return { statusCode: 200, body: 'OK' };
   }
 
-  await updateEnvelopeStatus(envelopeId, envelopeStatus);
+  // Ignore duplicate completions — if already completed, skip
+  if (record.status === 'completed' && envelopeStatus.toLowerCase() === 'completed') {
+    console.log('[AGENT4] Duplicate completion webhook ignored for:', envelopeId);
+    return { statusCode: 200, body: 'OK' };
+  }
+
+  await updateEnvelopeStatus(envelopeId, envelopeStatus.toLowerCase());
 
   switch (envelopeStatus.toLowerCase()) {
     case 'completed':
