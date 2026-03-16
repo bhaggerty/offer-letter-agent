@@ -11,9 +11,9 @@ Candidate moved to Hired in Ashby
         ↓
 Recruiter gets a Slack form (via Offer Letter Agent app) to fill in offer details
         ↓
-Blake reviews in Slack — can add notes — Approve or Reject
-        ↓ (Blake approves)
-#offer-approval channel — Paul or Alex gives final sign-off
+Head of Talent reviews in Slack — can add notes — Approve or Reject
+        ↓ (Head of Talent approves)
+Exec approval channel — designated exec gives final sign-off
         ↓ (Exec approves)
 Agent 2 — Calls Google Apps Script to:
           • Select correct template (standard or sales)
@@ -23,9 +23,9 @@ Agent 2 — Calls Google Apps Script to:
         ↓
 Agent 3 — Uploads PDF to DocuSign
           Signing order:
-            1. Alex Bovee (signs first)
+            1. Company signatory (signs first)
             2. Candidate (signs second)
-            3. Blake Haggerty (receives a copy)
+            3. Head of Talent (receives a copy)
         ↓
 Agent 4 — Monitors DocuSign for all signatures complete
           Auto-reminds if unsigned after 3 days
@@ -46,7 +46,7 @@ Agent 5 — Downloads signed PDF back to Drive
 ## Tech Stack
 
 - **Runtime:** Node.js 20
-- **Hosting:** ECS on AWS Fargate (ConductorOne Union Station)
+- **Hosting:** ECS on AWS Fargate (internal deployment platform)
 - **Database:** DynamoDB (auto-provisioned)
 - **AI Validation:** OpenAI GPT-4o
 - **Trigger:** Ashby webhook (Candidate Hired event)
@@ -84,26 +84,26 @@ src/
 |---|---|
 | `SLACK_BOT_TOKEN` | Slack bot token (xoxb-...) |
 | `SLACK_SIGNING_SECRET` | Slack app signing secret |
-| `SLACK_BLAKE_USER_ID` | Blake's Slack member ID |
+| `SLACK_BLAKE_USER_ID` | Head of Talent's Slack member ID |
 | `SLACK_RECRUITER_NOTIFY_CHANNEL` | Fallback channel if recruiter not in map |
-| `SLACK_EXEC_APPROVAL_CHANNEL` | `#offer-approval` channel ID — where Paul/Alex approve |
+| `SLACK_EXEC_APPROVAL_CHANNEL` | Private exec approval channel ID |
 | `ASHBY_WEBHOOK_SECRET` | Secret token from Ashby webhook settings |
 | `RECRUITER_SLACK_MAP` | JSON map of Ashby email → Slack user ID |
-| `OPENAI_API_KEY` | OpenAI API key (GPT-4o for offer validation) |
+| `OPENAI_API_KEY` | OpenAI API key (GPT-4o) |
 | `APPS_SCRIPT_URL` | Google Apps Script web app URL |
 | `APPS_SCRIPT_SECRET` | Secret key for Apps Script authentication |
 | `DOCUSIGN_INTEGRATION_KEY` | DocuSign app integration key |
 | `DOCUSIGN_SECRET_KEY` | DocuSign OAuth secret |
 | `DOCUSIGN_ACCOUNT_ID` | DocuSign account GUID (production) |
-| `DOCUSIGN_BASE_PATH` | `https://na4.docusign.net/restapi` |
+| `DOCUSIGN_BASE_PATH` | DocuSign production server URL + `/restapi` |
 | `DOCUSIGN_IMPERSONATED_USER_ID` | DocuSign user GUID (production) |
 | `DOCUSIGN_PRIVATE_KEY` | RSA private key (PEM, newlines as \n) |
-| `DOCUSIGN_ALEX_NAME` | Alex Bovee |
-| `DOCUSIGN_ALEX_EMAIL` | alex.bovee@conductorone.com |
-| `DOCUSIGN_BLAKE_NAME` | Blake Haggerty |
-| `DOCUSIGN_BLAKE_EMAIL` | blake.haggerty@conductorone.com |
-| `DOCUSIGN_WEBHOOK_URL` | `https://offer-letter-agent.prod.secsvcs.c1rew.com/docusign-webhook` |
-| `OFFER_REMINDER_DAYS` | `3` |
+| `DOCUSIGN_COMPANY_SIGNER_NAME` | Name of company signatory (signs first) |
+| `DOCUSIGN_COMPANY_SIGNER_EMAIL` | Email of company signatory |
+| `DOCUSIGN_CC_NAME` | Name of Head of Talent (receives copy) |
+| `DOCUSIGN_CC_EMAIL` | Email of Head of Talent |
+| `DOCUSIGN_WEBHOOK_URL` | Your app's public URL + `/docusign-webhook` |
+| `OFFER_REMINDER_DAYS` | Days before auto-reminding unsigned candidates (default: 3) |
 | `NODE_ENV` | `production` |
 | `PORT` | `8080` |
 
@@ -115,14 +115,12 @@ The `RECRUITER_SLACK_MAP` secret maps Ashby user emails to Slack user IDs so the
 
 ```json
 {
-  "ali.camilli@conductorone.com": "U09QADRPV7V",
-  "steven.craig@conductorone.com": "U09NUTGAUDT",
-  "jenni.capurro@conductorone.com": "U042AMRLW4R",
-  "blake.haggerty@conductorone.com": "U03A06WDEH0"
+  "recruiter1@company.com": "UXXXXXXXXX",
+  "recruiter2@company.com": "UXXXXXXXXX"
 }
 ```
 
-To add a new recruiter, update this secret in Union Station — no code changes needed.
+To add a new recruiter, update this secret in your deployment platform — no code changes needed.
 
 ---
 
@@ -148,10 +146,10 @@ Add these in **white 4pt font** (invisible) at the signature locations in both t
 
 | Anchor | Who | What |
 |---|---|---|
-| `\s1\` | Alex Bovee | Signature |
-| `\n1\` | Alex Bovee | Printed name |
-| `\t1\` | Alex Bovee | Title (CEO) |
-| `\d1\` | Alex Bovee | Date |
+| `\s1\` | Company signatory | Signature |
+| `\n1\` | Company signatory | Printed name |
+| `\t1\` | Company signatory | Title |
+| `\d1\` | Company signatory | Date |
 | `\s2\` | Candidate | Signature |
 | `\n2\` | Candidate | Printed name |
 | `\d2\` | Candidate | Date |
@@ -160,30 +158,34 @@ Add these in **white 4pt font** (invisible) at the signature locations in both t
 
 ## Webhook URLs
 
-App is reachable at: `https://offer-letter-agent.prod.secsvcs.c1rew.com`
-
-| Service | URL |
+| Service | Path |
 |---|---|
-| Ashby webhook | `.../ashby-webhook` |
-| Slack interactivity | `.../slack/events` |
-| DocuSign Connect | `.../docusign-webhook` |
+| Ashby webhook | `/ashby-webhook` |
+| Slack interactivity | `/slack/events` |
+| DocuSign Connect | `/docusign-webhook` |
 
 ---
 
 ## Adding a New Recruiter
 
 1. Get their Slack member ID (click profile → ••• → Copy member ID)
-2. Update `RECRUITER_SLACK_MAP` secret in Union Station to add their email → Slack ID
+2. Update `RECRUITER_SLACK_MAP` secret in your deployment platform to add their email → Slack ID
 3. No redeploy needed — secret updates take effect immediately
 
 ---
 
-## Switching to a New Exec Approval Channel
+## Switching Exec Approval Channel
 
-Update `SLACK_EXEC_APPROVAL_CHANNEL` in Union Station with the new channel ID and invite the bot with `/invite @Offer Letter Agent`.
+Update `SLACK_EXEC_APPROVAL_CHANNEL` in your deployment platform with the new channel ID and invite the bot with `/invite @Offer Letter Agent`.
 
 ---
 
-## Source Code
+## Known Gotchas
 
-github.com/bhaggerty/offer-letter-agent
+- **Ashby webhook event type** is `candidateHire` (not `applicationStageChange`)
+- **Ashby candidate email** is at `candidate.primaryEmailAddress.value`
+- **DocuSign sends XML** not JSON despite Connect being configured for JSON — code handles this automatically
+- **DocuSign fires completion webhook per signer** — code checks for pending signers before processing to avoid duplicate PDFs
+- **Apps Script permissions** — if Drive access fails, run the `testDriveAccess` function manually in the editor to grant OAuth permissions, then redeploy with a New version
+- **Apps Script deploy** — always select New version when deploying, not just Deploy
+- **DynamoDB key structure** — table uses `PK/SK` keys, not a single primary key
