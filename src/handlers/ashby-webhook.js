@@ -61,10 +61,23 @@ function extractOfferData(application) {
                          candidate?.email || 
                          candidate?.primaryEmail || '';
 
-  // Recruiter is the creditedToUser — map their email to a Slack user
-  // We store their Ashby user ID for now; the recruiter DM will go to SLACK_RECRUITER_NOTIFY_CHANNEL
-  // as a fallback since we don't have a direct Ashby→Slack user ID mapping
-  const recruiterId = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL;
+  // Map Ashby creditedToUser email to Slack user ID
+  const recruiterEmail = creditedToUser?.email || '';
+  let recruiterId = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL; // fallback
+
+  if (recruiterEmail && process.env.RECRUITER_SLACK_MAP) {
+    try {
+      const map = JSON.parse(process.env.RECRUITER_SLACK_MAP);
+      if (map[recruiterEmail]) {
+        recruiterId = map[recruiterEmail];
+        console.log('[ASHBY] Mapped recruiter', recruiterEmail, '→', recruiterId);
+      } else {
+        console.warn('[ASHBY] No Slack ID found for recruiter email:', recruiterEmail, '— using fallback');
+      }
+    } catch (err) {
+      console.error('[ASHBY] Failed to parse RECRUITER_SLACK_MAP:', err.message);
+    }
+  }
 
   return {
     candidateName:      candidate?.name || 'Unknown',
