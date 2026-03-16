@@ -25,8 +25,17 @@ async function processFromAshby({ offerData, slack }) {
 
   const recruiterId = offerData.recruiterId || RECRUITER_NOTIFY_CHANNEL;
 
+  // Open DM channel first — this works even if the user hasn't messaged the bot before
+  let dmChannel = recruiterId;
+  try {
+    const dmOpen = await slack.conversations.open({ users: recruiterId });
+    dmChannel = dmOpen.channel.id;
+  } catch (err) {
+    console.warn('[AGENT1] Could not open DM channel, falling back to user ID:', err.message);
+  }
+
   await slack.chat.postMessage({
-    channel: recruiterId,
+    channel: dmChannel,
     text: `New hire detected — please fill in offer details for ${offerData.candidateName}`,
     blocks: [
       {
