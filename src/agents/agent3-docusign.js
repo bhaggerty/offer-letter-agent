@@ -214,6 +214,14 @@ async function createAndSendEnvelope({ offerData, pdfBuffer, folderId, pdfFileId
     status: 'sent',
   });
 
+  // Notify exec channel
+  if (offerData.execChannel) {
+    await client.chat.postMessage({
+      channel: offerData.execChannel,
+      text: `📨 Sent to DocuSign — waiting for *${ALEX_NAME}* to sign first.`,
+    });
+  }
+
   // Notify recruiter
   await client.chat.postMessage({
     channel: offerData.recruiterId,

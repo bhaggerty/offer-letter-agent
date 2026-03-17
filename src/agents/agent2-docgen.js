@@ -24,6 +24,13 @@ const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET;
 async function runDocPipeline({ offerData, client }) {
   console.log('[AGENT2] Calling Apps Script for', offerData.candidateName);
 
+  if (offerData.execChannel) {
+    await client.chat.postMessage({
+      channel: offerData.execChannel,
+      text: `📄 Generating offer letter for *${offerData.candidateName}*...`,
+    });
+  }
+
   // Split candidate name into first/last for the script
   const nameParts = offerData.candidateName.trim().split(' ');
   const firstName = nameParts[0];
@@ -57,10 +64,22 @@ async function runDocPipeline({ offerData, client }) {
     scriptResult = response.data;
   } catch (err) {
     console.error('[AGENT2] Apps Script call failed:', err.message);
+    if (offerData.execChannel) {
+      await client.chat.postMessage({
+        channel: offerData.execChannel,
+        text: `⚠️ Document generation failed for *${offerData.candidateName}*: ${err.message}`,
+      });
+    }
     throw new Error(`Document generation failed: ${err.message}`);
   }
 
   if (!scriptResult.success) {
+    if (offerData.execChannel) {
+      await client.chat.postMessage({
+        channel: offerData.execChannel,
+        text: `⚠️ Document generation error for *${offerData.candidateName}*: ${scriptResult.error}`,
+      });
+    }
     throw new Error(`Apps Script error: ${scriptResult.error}`);
   }
 

@@ -35,7 +35,7 @@ function registerSlackHandlers(app) {
       workLocation:    values.work_location?.input?.value,
       employmentType:  values.employment_type?.input?.selected_option?.value || 'Full-time',
       variableComp:    values.variable_comp?.input?.value || '',
-      rampPeriod:      values.ramp_period?.input?.value || '',
+      rampPeriod:      values.ramp_period?.input?.selected_option?.value || '',
       additionalNotes: values.additional_notes?.input?.value || '',
       submittedAt:     new Date().toISOString(),
     };

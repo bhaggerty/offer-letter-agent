@@ -31,7 +31,25 @@ async function handleOfferSigned({ record, envelopeId }) {
   const driveLink = await uploadSignedPdfViaScrip({ offerData, folderId, signedPdfBuffer });
   console.log('[AGENT5] Signed PDF uploaded to Drive:', driveLink);
 
-  // ── 3. Notify the recruiter ───────────────────────────────────────────
+  // ── 3. Notify exec channel and recruiter ─────────────────────────────
+  if (offerData.execChannel) {
+    await slack.chat.postMessage({
+      channel: offerData.execChannel,
+      text: `🎉 *${offerData.candidateName}* — offer letter fully signed and archived to Drive.`,
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `🎉 *${offerData.candidateName}* (${offerData.role}) — offer letter fully signed and archived.` },
+          accessory: {
+            type: 'button',
+            text: { type: 'plain_text', text: '📄 View Signed Offer' },
+            url: driveLink,
+            action_id: 'view_signed_offer',
+          },
+        },
+      ],
+    });
+  }
   await notifyRecruiter({ offerData, driveLink });
 }
 

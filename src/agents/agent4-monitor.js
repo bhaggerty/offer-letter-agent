@@ -43,7 +43,16 @@ async function handleDocuSignWebhook(event) {
         const pendingSigners = sentCount + deliveredCount;
 
         if (pendingSigners > 0) {
-          console.log('[AGENT4] Still ' + pendingSigners + ' pending signers, skipping intermediate completion');
+          console.log('[AGENT4] Still ' + pendingSigners + ' pending signers — posting Alex-signed update');
+          const rec = await getEnvelopeRecord(envelopeIdMatch[1].trim());
+          if (rec && rec.offerData?.execChannel) {
+            const { WebClient } = require('@slack/web-api');
+            const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+            await slackClient.chat.postMessage({
+              channel: rec.offerData.execChannel,
+              text: `✍️ Alex Bovee has signed — offer letter sent to *${rec.offerData.candidateName}* for their signature.`,
+            });
+          }
           return { statusCode: 200, body: 'OK' };
         }
 
@@ -104,10 +113,19 @@ async function handleDocuSignWebhook(event) {
   await updateEnvelopeStatus(envelopeId, envelopeStatus.toLowerCase());
 
   switch (envelopeStatus.toLowerCase()) {
-    case 'completed':
+    case 'completed': {
       console.log('[AGENT4] Envelope completed:', envelopeId);
+      if (record.offerData?.execChannel) {
+        const { WebClient } = require('@slack/web-api');
+        const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+        await slackClient.chat.postMessage({
+          channel: record.offerData.execChannel,
+          text: `✅ *${record.offerData.candidateName}* has signed — all signatures complete. Archiving to Drive...`,
+        });
+      }
       await agent5.handleOfferSigned({ record, envelopeId });
       break;
+    }
 
     case 'declined':
       console.log('[AGENT4] Envelope declined:', envelopeId);
@@ -169,11 +187,19 @@ async function notifyRecruiterOfDecline({ record, envelopeId, status }) {
 
   const { offerData } = record;
   const statusWord = status === 'declined' ? '❌ declined to sign' : '🚫 voided';
+  const msg = `⚠️ The offer letter for *${offerData.candidateName}* (${offerData.role}) was ${statusWord} in DocuSign (envelope ID: ${envelopeId}).`;
 
   await slack.chat.postMessage({
     channel: offerData.recruiterId,
-    text: `⚠️ The offer letter for *${offerData.candidateName}* (${offerData.role}) was ${statusWord} in DocuSign (envelope ID: ${envelopeId}). Please follow up with the candidate or Blake.`,
+    text: `${msg} Please follow up with the candidate or Blake.`,
   });
+
+  if (offerData.execChannel) {
+    await slack.chat.postMessage({
+      channel: offerData.execChannel,
+      text: msg,
+    });
+  }
 }
 
 module.exports = { handleDocuSignWebhook, handleReminderCheck };

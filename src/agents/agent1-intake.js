@@ -130,7 +130,23 @@ async function processFromAshby({ offerData, slack }) {
         type: 'input',
         block_id: 'ramp_period',
         label: { type: 'plain_text', text: 'Ramp Period (Sales only)' },
-        element: { type: 'plain_text_input', action_id: 'input', placeholder: { type: 'plain_text', text: 'e.g. 3 months — leave blank for standard offer' } },
+        element: {
+          type: 'static_select',
+          action_id: 'input',
+          placeholder: { type: 'plain_text', text: 'Select ramp period...' },
+          options: [
+            { text: { type: 'plain_text', text: '1 month'  }, value: '1 month'  },
+            { text: { type: 'plain_text', text: '2 months' }, value: '2 months' },
+            { text: { type: 'plain_text', text: '3 months' }, value: '3 months' },
+            { text: { type: 'plain_text', text: '4 months' }, value: '4 months' },
+            { text: { type: 'plain_text', text: '5 months' }, value: '5 months' },
+            { text: { type: 'plain_text', text: '6 months' }, value: '6 months' },
+            { text: { type: 'plain_text', text: '7 months' }, value: '7 months' },
+            { text: { type: 'plain_text', text: '8 months' }, value: '8 months' },
+            { text: { type: 'plain_text', text: '9 months' }, value: '9 months' },
+            { text: { type: 'plain_text', text: '10 months' }, value: '10 months' },
+          ],
+        },
         optional: true,
       },
       {
@@ -202,6 +218,13 @@ async function routeToBlakeForApproval({ offerData, client }) {
           { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType || 'Full-time'}` },
         ],
       },
+      ...((offerData.variableComp || offerData.rampPeriod) ? [{
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Variable Comp*\n${offerData.variableComp || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Ramp Period*\n${offerData.rampPeriod || 'N/A'}` },
+        ],
+      }] : []),
       ...(offerData.additionalNotes ? [{
         type: 'section',
         text: { type: 'mrkdwn', text: `*Recruiter Notes*\n${offerData.additionalNotes}` },
@@ -256,7 +279,7 @@ async function routeToBlakeForApproval({ offerData, client }) {
  * Step 3: Send to exec channel (Paul/Alex) for final approval.
  */
 async function routeToExecChannel({ offerData, blakeNotes, client }) {
-  const offerWithNotes = { ...offerData, blakeNotes };
+  const offerWithNotes = { ...offerData, blakeNotes, execChannel: EXEC_APPROVAL_CHANNEL };
   const offerValueJson  = JSON.stringify(offerWithNotes);
   const rejectValueJson = JSON.stringify({ offerData: offerWithNotes });
 
@@ -289,6 +312,17 @@ async function routeToExecChannel({ offerData, blakeNotes, client }) {
           { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType || 'Full-time'}` },
         ],
       },
+      ...((offerData.variableComp || offerData.rampPeriod) ? [{
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Variable Comp*\n${offerData.variableComp || 'N/A'}` },
+          { type: 'mrkdwn', text: `*Ramp Period*\n${offerData.rampPeriod || 'N/A'}` },
+        ],
+      }] : []),
+      ...(offerData.additionalNotes ? [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Recruiter Notes*\n${offerData.additionalNotes}` },
+      }] : []),
       ...(blakeNotes ? [{
         type: 'section',
         text: { type: 'mrkdwn', text: `*Notes from Blake*\n${blakeNotes}` },
