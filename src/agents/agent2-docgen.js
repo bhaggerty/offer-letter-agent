@@ -19,17 +19,29 @@ const APPS_SCRIPT_URL    = process.env.APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET;
 
 /**
- * Main pipeline entry point — called after Blake approves.
+ * Post a status update to the exec channel (and optionally the recruiter).
+ */
+async function postExecStatus({ client, offerData, text }) {
+  if (offerData.execChannel) {
+    await client.chat.postMessage({
+      channel: offerData.execChannel,
+      text,
+    });
+  }
+}
+
+/**
+ * Main pipeline entry point — called after exec approves.
  */
 async function runDocPipeline({ offerData, client }) {
   console.log('[AGENT2] Calling Apps Script for', offerData.candidateName);
 
-  if (offerData.execChannel) {
-    await client.chat.postMessage({
-      channel: offerData.execChannel,
-      text: `📄 Generating offer letter for *${offerData.candidateName}*...`,
-    });
-  }
+  // Let the exec channel know we're generating the doc
+  await postExecStatus({
+    client,
+    offerData,
+    text: `📄 *${offerData.candidateName}* — Generating offer letter...`,
+  });
 
   // Split candidate name into first/last for the script
   const nameParts = offerData.candidateName.trim().split(' ');
@@ -57,33 +69,37 @@ async function runDocPipeline({ offerData, client }) {
       rampPeriod:     offerData.rampPeriod || '',
     }, {
       headers: { 'Content-Type': 'application/json' },
-      maxRedirects: 5, // Apps Script web apps redirect once
-      timeout: 30000,
+      maxRedirects: 5,
+      timeout: 90000,
     });
 
     scriptResult = response.data;
   } catch (err) {
     console.error('[AGENT2] Apps Script call failed:', err.message);
-    if (offerData.execChannel) {
-      await client.chat.postMessage({
-        channel: offerData.execChannel,
-        text: `⚠️ Document generation failed for *${offerData.candidateName}*: ${err.message}`,
-      });
-    }
+    await postExecStatus({
+      client,
+      offerData,
+      text: `⚠️ *${offerData.candidateName}* — Document generation failed: ${err.message}`,
+    });
     throw new Error(`Document generation failed: ${err.message}`);
   }
 
   if (!scriptResult.success) {
-    if (offerData.execChannel) {
-      await client.chat.postMessage({
-        channel: offerData.execChannel,
-        text: `⚠️ Document generation error for *${offerData.candidateName}*: ${scriptResult.error}`,
-      });
-    }
+    await postExecStatus({
+      client,
+      offerData,
+      text: `⚠️ *${offerData.candidateName}* — Apps Script error: ${scriptResult.error}`,
+    });
     throw new Error(`Apps Script error: ${scriptResult.error}`);
   }
 
   console.log('[AGENT2] Apps Script success, docId:', scriptResult.docId);
+
+  await postExecStatus({
+    client,
+    offerData,
+    text: `✅ *${offerData.candidateName}* — Offer letter generated. Sending to DocuSign...`,
+  });
 
   // ── Convert base64 PDF back to a Buffer for DocuSign ─────────────────
   const pdfBuffer = Buffer.from(scriptResult.pdfBase64, 'base64');

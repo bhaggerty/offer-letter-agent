@@ -51,6 +51,7 @@ async function handleOfferSigned({ record, envelopeId }) {
     });
   }
   await notifyRecruiter({ offerData, driveLink });
+  await notifyOnboarding({ offerData });
 }
 
 /**
@@ -130,6 +131,61 @@ async function notifyRecruiter({ offerData, driveLink }) {
         ],
       },
     ],
+  });
+}
+
+const ONBOARDING_SLACK_USER_ID = 'U08SMNZA272';
+
+/**
+ * Notify the onboarding contact with full offer details and a prompt to start onboarding.
+ */
+async function notifyOnboarding({ offerData }) {
+  const fields = [
+    { type: 'mrkdwn', text: `*Candidate*\n${offerData.candidateName}` },
+    { type: 'mrkdwn', text: `*Role*\n${offerData.role}` },
+    { type: 'mrkdwn', text: `*Start Date*\n${offerData.startDate}` },
+    { type: 'mrkdwn', text: `*Salary*\n${offerData.salary}` },
+    { type: 'mrkdwn', text: `*Signing Bonus*\n${offerData.signingBonus || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Equity*\n${offerData.equity || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Reports To*\n${offerData.reportsTo}` },
+    { type: 'mrkdwn', text: `*Work Location*\n${offerData.workLocation}` },
+    { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType}` },
+  ];
+
+  if (offerData.variableComp) {
+    fields.push({ type: 'mrkdwn', text: `*Variable Comp*\n${offerData.variableComp}` });
+  }
+  if (offerData.rampPeriod) {
+    fields.push({ type: 'mrkdwn', text: `*Ramp Period*\n${offerData.rampPeriod}` });
+  }
+
+  const blocks = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: '✅ Offer Letter Fully Executed — Start Onboarding' },
+    },
+    {
+      type: 'section',
+      fields,
+    },
+  ];
+
+  if (offerData.additionalNotes) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Additional Notes*\n${offerData.additionalNotes}` },
+    });
+  }
+
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: 'Please *Start Onboarding* for this candidate.' },
+  });
+
+  await slack.chat.postMessage({
+    channel: ONBOARDING_SLACK_USER_ID,
+    text: `✅ Offer letter fully executed for ${offerData.candidateName} — please Start Onboarding.`,
+    blocks,
   });
 }
 
