@@ -142,6 +142,8 @@ const ONBOARDING_SLACK_USER_ID = 'U08SMNZA272';
 async function notifyOnboarding({ offerData }) {
   const fields = [
     { type: 'mrkdwn', text: `*Candidate*\n${offerData.candidateName}` },
+    { type: 'mrkdwn', text: `*Personal Email*\n${offerData.candidateEmail || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Recruiter*\n${offerData.recruiterId ? `<@${offerData.recruiterId}>` : 'N/A'}` },
     { type: 'mrkdwn', text: `*Role*\n${offerData.role}` },
     { type: 'mrkdwn', text: `*Start Date*\n${offerData.startDate}` },
     { type: 'mrkdwn', text: `*Salary*\n${offerData.salary}` },
