@@ -13,8 +13,9 @@ async function notifyStakeholders({ client, offerData, text, blocks }) {
   if (offerData?.recruiterId) recipients.add(offerData.recruiterId);
   if (SLACK_AMY_USER_ID) recipients.add(SLACK_AMY_USER_ID);
 
-  await Promise.all(
-    Array.from(recipients).map((channel) =>
+  const channels = Array.from(recipients);
+  const results = await Promise.allSettled(
+    channels.map((channel) =>
       client.chat.postMessage({
         channel,
         text,
@@ -22,6 +23,12 @@ async function notifyStakeholders({ client, offerData, text, blocks }) {
       })
     )
   );
+
+  results.forEach((result, i) => {
+    if (result.status === 'rejected') {
+      console.error(`[notifyStakeholders] Failed to notify ${channels[i]}:`, result.reason);
+    }
+  });
 }
 
 module.exports = { notifyStakeholders };

@@ -242,6 +242,17 @@ async function createAndSendEnvelope({ offerData, pdfBuffer, folderId, pdfFileId
     detailFields.push({ type: 'mrkdwn', text: `*Ramp Period*\n${offerData.rampPeriod}` });
   }
 
+  // Slack section blocks allow at most 10 fields each, so chunk in case
+  // optional fields push the count over the limit.
+  const SLACK_MAX_FIELDS_PER_SECTION = 10;
+  const detailFieldSections = [];
+  for (let i = 0; i < detailFields.length; i += SLACK_MAX_FIELDS_PER_SECTION) {
+    detailFieldSections.push({
+      type: 'section',
+      fields: detailFields.slice(i, i + SLACK_MAX_FIELDS_PER_SECTION),
+    });
+  }
+
   await notifyStakeholders({
     client,
     offerData,
@@ -251,10 +262,7 @@ async function createAndSendEnvelope({ offerData, pdfBuffer, folderId, pdfFileId
         type: 'header',
         text: { type: 'plain_text', text: '📨 Offer Letter Sent to DocuSign' },
       },
-      {
-        type: 'section',
-        fields: detailFields,
-      },
+      ...detailFieldSections,
       {
         type: 'section',
         text: { type: 'mrkdwn', text: `*Signing order:*\n1. ${ALEX_NAME} — signs first\n2. ${offerData.candidateName} — signs after Alex\n3. ${BLAKE_NAME} — receives a copy\n\nYou'll be notified here when everything is signed.` },
