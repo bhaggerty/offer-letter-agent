@@ -13,6 +13,7 @@ const axios = require('axios');
 const { WebClient } = require('@slack/web-api');
 const { getApiClient } = require('./agent3-docusign');
 const docusign = require('docusign-esign');
+const { notifyStakeholders } = require('../lib/notify');
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 
@@ -102,9 +103,10 @@ async function uploadSignedPdfViaScrip({ offerData, folderId, signedPdfBuffer })
  * Send the recruiter a Slack DM with confirmation and Drive link.
  */
 async function notifyRecruiter({ offerData, driveLink }) {
-  await slack.chat.postMessage({
-    channel: offerData.recruiterId,
-    text: `🎉 Offer fully signed!`,
+  await notifyStakeholders({
+    client: slack,
+    offerData,
+    text: `🎉 Offer fully signed! Archived to Drive: ${driveLink}`,
     blocks: [
       {
         type: 'header',
