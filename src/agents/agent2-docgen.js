@@ -14,6 +14,7 @@
 
 const axios   = require('axios');
 const agent3  = require('./agent3-docusign');
+const { notifyStakeholders } = require('../lib/notify');
 
 const APPS_SCRIPT_URL    = process.env.APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = process.env.APPS_SCRIPT_SECRET;
@@ -41,6 +42,13 @@ async function runDocPipeline({ offerData, client }) {
     client,
     offerData,
     text: `📄 *${offerData.candidateName}* — Generating offer letter...`,
+  });
+
+  // Exec approved — let the recruiter and Amy know the letter is being generated
+  await notifyStakeholders({
+    client,
+    offerData,
+    text: `✅ The offer for *${offerData.candidateName}* was approved — generating the offer letter now.`,
   });
 
   // Split candidate name into first/last for the script
@@ -81,6 +89,11 @@ async function runDocPipeline({ offerData, client }) {
       offerData,
       text: `⚠️ *${offerData.candidateName}* — Document generation failed: ${err.message}`,
     });
+    await notifyStakeholders({
+      client,
+      offerData,
+      text: `⚠️ Document generation failed for *${offerData.candidateName}*: ${err.message}`,
+    });
     throw new Error(`Document generation failed: ${err.message}`);
   }
 
@@ -89,6 +102,11 @@ async function runDocPipeline({ offerData, client }) {
       client,
       offerData,
       text: `⚠️ *${offerData.candidateName}* — Apps Script error: ${scriptResult.error}`,
+    });
+    await notifyStakeholders({
+      client,
+      offerData,
+      text: `⚠️ Document generation failed for *${offerData.candidateName}*: ${scriptResult.error}`,
     });
     throw new Error(`Apps Script error: ${scriptResult.error}`);
   }

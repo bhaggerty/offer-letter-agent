@@ -19,6 +19,7 @@
 
 const docusign = require('docusign-esign');
 const { storeEnvelopeRecord } = require('../lib/state-store');
+const { notifyStakeholders } = require('../lib/notify');
 
 const DS_BASE_PATH   = process.env.DOCUSIGN_BASE_PATH;
 const DS_ACCOUNT_ID  = process.env.DOCUSIGN_ACCOUNT_ID;
@@ -222,10 +223,43 @@ async function createAndSendEnvelope({ offerData, pdfBuffer, folderId, pdfFileId
     });
   }
 
-  // Notify recruiter
-  await client.chat.postMessage({
-    channel: offerData.recruiterId,
-    text: `📨 Offer letter for *${offerData.candidateName}* (${offerData.role}) is in DocuSign.\n\n*Signing order:*\n1. ${ALEX_NAME} — signs first\n2. ${offerData.candidateName} — signs after Alex\n3. ${BLAKE_NAME} — receives a copy\n\nYou'll be notified here when everything is signed.`,
+  // Notify recruiter and Amy with full offer details
+  const detailFields = [
+    { type: 'mrkdwn', text: `*Candidate*\n${offerData.candidateName}` },
+    { type: 'mrkdwn', text: `*Email*\n${offerData.candidateEmail || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Role*\n${offerData.role || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Start Date*\n${offerData.startDate || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Salary*\n${offerData.salary || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Signing Bonus*\n${offerData.signingBonus || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Equity*\n${offerData.equity || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Location*\n${offerData.workLocation || 'N/A'}` },
+    { type: 'mrkdwn', text: `*Employment Type*\n${offerData.employmentType || 'Full-time'}` },
+  ];
+  if (offerData.variableComp) {
+    detailFields.push({ type: 'mrkdwn', text: `*Variable Comp*\n${offerData.variableComp}` });
+  }
+  if (offerData.rampPeriod) {
+    detailFields.push({ type: 'mrkdwn', text: `*Ramp Period*\n${offerData.rampPeriod}` });
+  }
+
+  await notifyStakeholders({
+    client,
+    offerData,
+    text: `📨 Offer letter for *${offerData.candidateName}* (${offerData.role}) is in DocuSign.`,
+    blocks: [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: '📨 Offer Letter Sent to DocuSign' },
+      },
+      {
+        type: 'section',
+        fields: detailFields,
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Signing order:*\n1. ${ALEX_NAME} — signs first\n2. ${offerData.candidateName} — signs after Alex\n3. ${BLAKE_NAME} — receives a copy\n\nYou'll be notified here when everything is signed.` },
+      },
+    ],
   });
 
   return envelopeId;

@@ -12,6 +12,7 @@
 
 const { getEnvelopeRecord, updateEnvelopeStatus } = require('../lib/state-store');
 const agent5 = require('./agent5-notify');
+const { notifyStakeholders } = require('../lib/notify');
 
 /**
  * Lambda handler for DocuSign webhook POST.
@@ -45,12 +46,19 @@ async function handleDocuSignWebhook(event) {
         if (pendingSigners > 0) {
           console.log('[AGENT4] Still ' + pendingSigners + ' pending signers — posting Alex-signed update');
           const rec = await getEnvelopeRecord(envelopeIdMatch[1].trim());
-          if (rec && rec.offerData?.execChannel) {
+          if (rec) {
             const { WebClient } = require('@slack/web-api');
             const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
-            await slackClient.chat.postMessage({
-              channel: rec.offerData.execChannel,
-              text: `✍️ Alex Bovee has signed — offer letter sent to *${rec.offerData.candidateName}* for their signature.`,
+            if (rec.offerData?.execChannel) {
+              await slackClient.chat.postMessage({
+                channel: rec.offerData.execChannel,
+                text: `✍️ Alex Bovee has signed — offer letter sent to *${rec.offerData.candidateName}* for their signature.`,
+              });
+            }
+            await notifyStakeholders({
+              client: slackClient,
+              offerData: rec.offerData,
+              text: `✍️ Alex Bovee has signed the offer letter for *${rec.offerData.candidateName}* — waiting on the candidate's signature now.`,
             });
           }
           return { statusCode: 200, body: 'OK' };
@@ -115,11 +123,18 @@ async function handleDocuSignWebhook(event) {
   switch (envelopeStatus.toLowerCase()) {
     case 'completed': {
       console.log('[AGENT4] Envelope completed:', envelopeId);
-      if (record.offerData?.execChannel) {
+      {
         const { WebClient } = require('@slack/web-api');
         const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
-        await slackClient.chat.postMessage({
-          channel: record.offerData.execChannel,
+        if (record.offerData?.execChannel) {
+          await slackClient.chat.postMessage({
+            channel: record.offerData.execChannel,
+            text: `✅ *${record.offerData.candidateName}* has signed — all signatures complete. Archiving to Drive...`,
+          });
+        }
+        await notifyStakeholders({
+          client: slackClient,
+          offerData: record.offerData,
           text: `✅ *${record.offerData.candidateName}* has signed — all signatures complete. Archiving to Drive...`,
         });
       }
@@ -189,8 +204,9 @@ async function notifyRecruiterOfDecline({ record, envelopeId, status }) {
   const statusWord = status === 'declined' ? '❌ declined to sign' : '🚫 voided';
   const msg = `⚠️ The offer letter for *${offerData.candidateName}* (${offerData.role}) was ${statusWord} in DocuSign (envelope ID: ${envelopeId}).`;
 
-  await slack.chat.postMessage({
-    channel: offerData.recruiterId,
+  await notifyStakeholders({
+    client: slack,
+    offerData,
     text: `${msg} Please follow up with the candidate or Blake.`,
   });
 

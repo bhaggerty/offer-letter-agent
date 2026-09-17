@@ -12,6 +12,7 @@
  */
 
 const { routeToBlakeForApproval, routeToExecChannel } = require('../agents/agent1-intake');
+const { notifyStakeholders } = require('../lib/notify');
 
 const BLAKE_SLACK_USER_ID = process.env.SLACK_BLAKE_USER_ID;
 
@@ -56,8 +57,9 @@ function registerSlackHandlers(app) {
       await routeToBlakeForApproval({ offerData, client });
     } catch (err) {
       console.error('[AGENT1] Error routing to Blake:', err);
-      await client.chat.postMessage({
-        channel: offerData.recruiterId,
+      await notifyStakeholders({
+        client,
+        offerData,
         text: `⚠️ Something went wrong sending the offer to Blake. Error: ${err.message}`,
       });
     }
@@ -113,8 +115,9 @@ function registerSlackHandlers(app) {
       }],
     });
 
-    await client.chat.postMessage({
-      channel: offerData.recruiterId,
+    await notifyStakeholders({
+      client,
+      offerData,
       text: `❌ The offer for *${offerData.candidateName}* (${offerData.role}) was not approved by Blake. Please follow up directly for more details.`,
     });
   });
@@ -143,8 +146,9 @@ function registerSlackHandlers(app) {
       await runDocPipeline({ offerData, client });
     } catch (err) {
       console.error('[AGENT2+] Pipeline error:', err);
-      await client.chat.postMessage({
-        channel: offerData.recruiterId,
+      await notifyStakeholders({
+        client,
+        offerData,
         text: `⚠️ Offer was approved but document generation failed for *${offerData.candidateName}*. Error: ${err.message}`,
       });
     }
@@ -172,6 +176,12 @@ function registerSlackHandlers(app) {
     await client.chat.postMessage({
       channel: BLAKE_SLACK_USER_ID,
       text: `❌ The offer for *${offerData.candidateName}* (${offerData.role}) was rejected by <@${rejecterId}> in the exec approval channel.`,
+    });
+
+    await notifyStakeholders({
+      client,
+      offerData,
+      text: `❌ The offer for *${offerData.candidateName}* (${offerData.role}) was not approved by the exec team. Please follow up directly for more details.`,
     });
   });
 

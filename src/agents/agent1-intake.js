@@ -12,6 +12,8 @@
  *  6. Any rejection → notify appropriate party
  */
 
+const { notifyStakeholders } = require('../lib/notify');
+
 const BLAKE_SLACK_USER_ID        = process.env.SLACK_BLAKE_USER_ID;
 const RECRUITER_NOTIFY_CHANNEL   = process.env.SLACK_RECRUITER_NOTIFY_CHANNEL;
 const EXEC_APPROVAL_CHANNEL      = process.env.SLACK_EXEC_APPROVAL_CHANNEL; // C0AM3NZDA81
@@ -269,8 +271,9 @@ async function routeToBlakeForApproval({ offerData, client }) {
     ],
   });
 
-  await client.chat.postMessage({
-    channel: offerData.recruiterId,
+  await notifyStakeholders({
+    client,
+    offerData,
     text: `👍 Offer details for *${offerData.candidateName}* have been sent to Blake for review. You'll be notified once it's fully approved.`,
   });
 }
@@ -357,6 +360,12 @@ async function routeToExecChannel({ offerData, blakeNotes, client }) {
         ],
       },
     ],
+  });
+
+  await notifyStakeholders({
+    client,
+    offerData,
+    text: `✅ Blake approved the offer for *${offerData.candidateName}* — sent to the exec channel for final sign-off.`,
   });
 }
 
