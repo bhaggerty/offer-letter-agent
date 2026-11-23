@@ -81,8 +81,6 @@ async function handleDocuSignWebhook(event) {
     return { statusCode: 200, body: 'OK' };
   }
 
-  // Log full payload so we can see exact shape
-  console.log('[AGENT4] Full payload:', JSON.stringify(payload, null, 2));
 
   // DocuSign Connect JSON format
   const envelopeId =

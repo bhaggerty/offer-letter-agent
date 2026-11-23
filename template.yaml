@@ -56,6 +56,10 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ''
+  DocusignConnectHmacKeys:
+    Type: String
+    NoEcho: true
+    Description: 'DocuSign Connect HMAC key(s), comma-separated. Required: unsigned DocuSign webhooks are rejected.'
   SlackBlakeUserId:
     Type: String
   DocusignAlexName:
@@ -106,6 +110,7 @@ Resources:
           SLACK_BLAKE_USER_ID:            !Ref SlackBlakeUserId
           SLACK_RECRUITER_NOTIFY_CHANNEL: !Ref SlackRecruiterNotifyChannel
           ASHBY_WEBHOOK_SECRET:           !Ref AshbyWebhookSecret
+          DOCUSIGN_CONNECT_HMAC_KEYS:     !Ref DocusignConnectHmacKeys
           ANTHROPIC_API_KEY:              !Ref AnthropicApiKey
           GOOGLE_SERVICE_ACCOUNT_JSON:    !Ref GoogleServiceAccountJson
           GOOGLE_OFFER_TEMPLATE_ID:       !Ref GoogleOfferTemplateId
