@@ -24,7 +24,6 @@ async function handleAshbyWebhook(event) {
 
   const eventType = payload?.action || payload?.event || payload?.type;
   console.log('[ASHBY] Event received:', eventType);
-  console.log('[ASHBY] Full payload:', JSON.stringify(payload, null, 2));
 
   if (eventType === 'ping' || eventType === 'test') {
     return { statusCode: 200, body: 'OK' };
